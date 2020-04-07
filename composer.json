@@ -1,6 +1,6 @@
 {
     "name": "headjam/craft-saasu-sync",
-    "description": "Syncs the Craft Commerce products with Saasu.",
+    "description": "Syncs Craft Commerce products and sales with Saasu.",
     "type": "craft-plugin",
     "version": "1.0.0",
     "keywords": [
