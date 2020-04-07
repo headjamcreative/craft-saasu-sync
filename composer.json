@@ -1,0 +1,44 @@
+{
+    "name": "headjam/craft-saasu-sync",
+    "description": "Syncs the Craft Commerce products with Saasu.",
+    "type": "craft-plugin",
+    "version": "1.0.0",
+    "keywords": [
+        "craft",
+        "cms",
+        "craftcms",
+        "commerce",
+        "craft-plugin",
+        "craft saasu sync"
+    ],
+    "support": {
+        "docs": "https://www.headjam.com.au",
+        "issues": "https://www.headjam.com.au"
+    },
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Ben Norman",
+            "homepage": "https://www.headjam.com.au"
+        }
+    ],
+    "require": {
+        "craftcms/cms": "^3.4.0",
+        "craftcms/commerce": "^3.0.0"
+    },
+    "autoload": {
+        "psr-4": {
+          "headjam\\craftsaasusync\\": "src/"
+        }
+    },
+    "extra": {
+        "name": "Craft Saasu Sync",
+        "handle": "craft-saasu-sync",
+        "developer": "Ben Norman",
+        "developerUrl": "https://www.headjam.com.au",
+        "documentationUrl": "https://www.headjam.com.au",
+        "changelogUrl": "https://www.headjam.com.au",
+        "class": "headjam\\craftsaasusync\\CraftSaasuSync"
+    }
+}
+uECrxp6vXuu1IFGw
