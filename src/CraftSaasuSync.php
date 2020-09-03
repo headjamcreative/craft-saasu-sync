@@ -148,10 +148,16 @@ class CraftSaasuSync extends Plugin
     );
   }
 
-
-
   // Protected Methods
   // =========================================================================
+  /** 
+   * Returns true if all the required fields for Saasu are supplied.
+   * @return Boolean
+   */
+  private function saasuIntegrationValid() {
+    return $this->saasuAuth && $this->saasuBankAccount && $this->saasuItemAccount && $this->saasuServiceAccount && $this->saasuShippingId;
+  }
+
   /**
    * Generate the Saaus-ready item adjustments for the given line items.
    * @param Order $order - The order to generate line items from.
@@ -168,7 +174,7 @@ class CraftSaasuSync extends Plugin
             'Description' => $lineItem->snapshot['title'],
             'AccountId' => $this->saasuItemAccount,
             'Quantity' => $lineItem->qty,
-            'UnitPrice' => $lineItem->snapshot['price'],
+            'UnitPrice' => $lineItem->salePrice,
             'InventoryId' => $lineItem->snapshot['saasuId'],
           );
           $saasuAmount += $lineItem->snapshot['price'] * $lineItem->qty;
@@ -242,17 +248,16 @@ class CraftSaasuSync extends Plugin
    * @param Order $order - The order that was submitted.
    * @param Boolean $service - True if this is a service invoice, else false.
    * @param LineItem[] $lineItems - The array of line items.
-   * @param InvoiceQuickPaymentDetail $payment - The payment made by the user.
+   * @param InvoiceQuickPaymentDetail|null $payment - The optional payment made by the user.
    * @param String $desc - The description text to add to the notes.
+   * @param String|null $po - The purchase order number.
    */
-  private function generateInvoiceData($order, $service, $lineItems, $payment, $desc) {
-    return array(
+  private function generateInvoiceData($order, $service, $lineItems, $payment, $desc, $po) {
+    $invoice = array(
       'LineItems' => $lineItems,
       'NotesInternal' => $desc . ' - Online order reference: ' . $order->number,
-      'QuickPayment' => $payment,
-      'Currency' => $order->currency,
       'InvoiceNumber' => '<Auto Number>',
-      'InvoiceType' => 'Tax Invoice',
+      'InvoiceType' => 'Sale Order',
       'TransactionType' => 'S',
       'Layout' => $service ? 'S' : 'I',
       'Summary' => $desc . ' - Online order reference: ' . $order->number,
@@ -260,6 +265,15 @@ class CraftSaasuSync extends Plugin
       'RequiresFollowUp' => false,
       'TransactionDate' => $order->dateOrdered->format('c'),
     );
+    if ($payment) {
+      $invoice['QuickPayment'] = $payment;
+      $invoice['Currency'] = $order->currency;
+    }
+    if ($po) {
+      // $invoice['InvoiceType'] = 'Purchase Order';
+      $invoice['PurchaseOrderNumber'] = $po;
+    }
+    return $invoice;
   }
 
   /**
@@ -287,18 +301,21 @@ class CraftSaasuSync extends Plugin
    * for products and shipping (if applicable).
    */
   private function generateAndPostInvoices($order) {
-    $itemsDesc = 'Listed items';
-    $itemsAndAmounts = CraftSaasuSync::generateLineItems($order);
-    $itemsPayment = CraftSaasuSync::generatePaymentDetails($order, $itemsAndAmounts['saasuAmount'], $itemsDesc);
-    $itemsInvoice = CraftSaasuSync::generateInvoiceData($order, false, $itemsAndAmounts['items'], $itemsPayment, $itemsDesc);
-    CraftSaasuSync::postInvoice($itemsInvoice);
+    if (CraftSaasuSync::saasuIntegrationValid()) {
+      $itemsDesc = 'Listed items';
+      $itemsAndAmounts = CraftSaasuSync::generateLineItems($order);
+      $itemsPayment = $order->datePaid ? CraftSaasuSync::generatePaymentDetails($order, $itemsAndAmounts['saasuAmount'], $itemsDesc) : null;
+      $itemsPo = $order->gateway->handle == 'purchaseOrder' ? $order->orderReference : null;
+      $itemsInvoice = CraftSaasuSync::generateInvoiceData($order, false, $itemsAndAmounts['items'], $itemsPayment, $itemsDesc, $itemsPo);
+      CraftSaasuSync::postInvoice($itemsInvoice);
 
-    if ($itemsAndAmounts['unlistedAmount'] > 0) {
-      $unlistedItemsDesc = 'Unlisted items';
-      $unlistedItems = CraftSaasuSync::generateUnlistedLineItem($itemsAndAmounts['unlistedAmount']);
-      $unlistedItemsPayment = CraftSaasuSync::generatePaymentDetails($order, $itemsAndAmounts['unlistedAmount'], $unlistedItemsDesc);
-      $unlistedItemsInvoice = CraftSaasuSync::generateInvoiceData($order, true, [$unlistedItems], $unlistedItemsPayment, $unlistedItemsDesc);
-      CraftSaasuSync::postInvoice($unlistedItemsInvoice);
+      if ($itemsAndAmounts['unlistedAmount'] > 0) {
+        $unlistedItemsDesc = 'Unlisted items';
+        $unlistedItems = CraftSaasuSync::generateUnlistedLineItem($itemsAndAmounts['unlistedAmount']);
+        $unlistedItemsPayment = $order->datePaid ? CraftSaasuSync::generatePaymentDetails($order, $itemsAndAmounts['unlistedAmount'], $unlistedItemsDesc) : null;
+        $unlistedItemsInvoice = CraftSaasuSync::generateInvoiceData($order, true, [$unlistedItems], $unlistedItemsPayment, $unlistedItemsDesc, $itemsPo);
+        CraftSaasuSync::postInvoice($unlistedItemsInvoice);
+      }
     }
   }
 
@@ -308,7 +325,7 @@ class CraftSaasuSync extends Plugin
    * @param Variant $variant - The variant to sync with Saasu.
    */
   private function syncProductStockLevels($variant = false) {
-    if ($variant && $variant->saasuId && !$variant->hasUnlimitedStock) {
+    if ($variant && $variant->saasuId && !$variant->hasUnlimitedStock && CraftSaasuSync::saasuIntegrationValid()) {
       $url = $this->saasuApiUrl . 'Item/' . $variant->saasuId . $this->saasuAuth;
       $curl = curl_init($url);
       curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
